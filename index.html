@@ -8,9 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="涼麵陳">
 <title>涼麵陳 營運管理</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Firebase SDK (compat版本，更穩定) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 :root{--bg:#FAF6F1;--sf:#FDF9F5;--card:#FFF;--bd:#E8DDD0;--bdl:#F0E8DC;--p:#C4956A;--pl:#E8D5BE;--pd:#A67852;--ac:#8B6347;--tx:#3D2B1F;--su:#7A6355;--lt:#A89080;--gn:#6B9E78;--rd:#C4706A;--yw:#C4A96A;--bl:#6A8EC4;--sh:rgba(196,149,106,0.13);}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -34,7 +33,6 @@ body{margin:0;background:var(--bg);font-family:'Georgia',serif;color:var(--tx);m
 .ct{font-size:14.5px;font-weight:700;color:var(--ac);margin-bottom:11px;display:flex;align-items:center;gap:5px;}
 label.lb2{font-size:11px;color:var(--su);font-weight:600;display:block;margin-bottom:3px;}
 input,select{width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--bd);background:var(--sf);color:var(--tx);font-size:13.5px;font-family:inherit;outline:none;appearance:none;-webkit-appearance:none;}
-input:disabled{background:var(--bdl);color:var(--lt);}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M6 8L0 0h12z' fill='%23A89080'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px;}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
@@ -84,7 +82,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </style>
 </head>
 <body>
-<div id="ld"><div style="font-size:30px">🍜</div><div class="spin"></div><p id="ldm">連線 Firebase 中…</p></div>
+<div id="ld"><div style="font-size:30px">🍜</div><div class="spin"></div><p id="ldm">連線中…</p></div>
 <div id="aw" style="display:none">
   <div class="hd">
     <div class="logo">涼麵陳</div>
@@ -107,18 +105,19 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div>
 <div id="toast"></div>
 <script>
-// ── Firebase 初始化 (compat 版) ──────────────────────────
+// ── Firebase Realtime Database ───────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyBMYSOEEMieeemojw5jArxCG_3pG2GPhgk",
   authDomain: "liangmianchen-e0d6a.firebaseapp.com",
   projectId: "liangmianchen-e0d6a",
+  databaseURL: "https://liang-mian-chen-default-rtdb.asia-southeast1.firebasedatabase.app",
   storageBucket: "liangmianchen-e0d6a.firebasestorage.app",
   messagingSenderId: "804649622117",
   appId: "1:804649622117:web:5ed418f67bc5826efc448c"
 };
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const DOC = db.collection("lmc").doc("main");
+const rtdb = firebase.database();
+const REF = rtdb.ref('lmc');
 
 // ── 常數 ────────────────────────────────────────────────
 const VA=['立成製麵','櫳樺','陳家麻醬','晨新商行','浤浰商行','源臻有限公司','其他'];
@@ -131,59 +130,48 @@ const YRS=()=>{const y=new Date().getFullYear();return[y-2,y-1,y,y+1];};
 
 let D={sales:{},purchases:{},staff:[],expenses:{},acct:{},bag:{}};
 let svT=null;
-let fbOk=false;
 
-function setDot(s){
-  const d=document.getElementById('cdot');
-  if(!d)return;
-  d.className='cd'+(s==='ok'?' ok':s==='er'?' er':'');
-  d.title=s==='ok'?'☁️ 雲端已同步':s==='er'?'⚠️ 同步失敗':'同步中…';
-}
+function setDot(s){const d=document.getElementById('cdot');if(!d)return;d.className='cd'+(s==='ok'?' ok':s==='er'?' er':'');d.title=s==='ok'?'☁️ 已同步':s==='er'?'⚠️ 失敗':'同步中…';}
 
 async function cloudSave(){
   setDot('');
   try{
-    await DOC.set(JSON.parse(JSON.stringify(D)));
-    setDot('ok');fbOk=true;
+    await REF.set(JSON.parse(JSON.stringify(D)));
+    setDot('ok');
   }catch(e){
-    console.error('Save error:',e);
+    console.error('Save:',e);
     setDot('er');
-    toast('⚠️ 雲端儲存失敗：'+e.message,'er');
+    toast('⚠️ 儲存失敗：'+e.message,'er');
   }
 }
 
 function save(){
-  try{localStorage.setItem('lmc_v7',JSON.stringify(D));}catch(_){}
+  try{localStorage.setItem('lmc_v8',JSON.stringify(D));}catch(_){}
   clearTimeout(svT);
   svT=setTimeout(()=>cloudSave(),800);
 }
 
 async function init(){
-  document.getElementById('ldm').textContent='載入雲端資料中…';
+  document.getElementById('ldm').textContent='載入雲端資料…';
   try{
-    const snap=await DOC.get();
-    if(snap.exists){
-      D=snap.data();
-      fbOk=true;
+    const snap = await REF.get();
+    if(snap.exists()){
+      D = snap.val();
       setDot('ok');
-      document.getElementById('ldm').textContent='載入完成！';
     } else {
-      // 嘗試從 localStorage 恢復
-      try{const l=localStorage.getItem('lmc_v7');if(l)D=JSON.parse(l);}catch(_){}
-      try{const l=localStorage.getItem('lmc_v6');if(l)D=JSON.parse(l);}catch(_){}
-      try{const l=localStorage.getItem('lmc_v5');if(l)D=JSON.parse(l);}catch(_){}
+      // 嘗試舊版本 localStorage
+      ['lmc_v7','lmc_v6','lmc_v5'].forEach(k=>{
+        try{const l=localStorage.getItem(k);if(l&&!D.sales)D=JSON.parse(l);}catch(_){}
+      });
       setDot('ok');
     }
   }catch(e){
-    console.error('Load error:',e);
+    console.error('Load:',e);
     setDot('er');
-    // 從 localStorage 恢復
-    try{const l=localStorage.getItem('lmc_v7');if(l)D=JSON.parse(l);}catch(_){}
-    try{const l=localStorage.getItem('lmc_v6');if(l)D=JSON.parse(l);}catch(_){}
-    document.getElementById('ldm').textContent='離線模式（'+e.code+')';
-    await new Promise(r=>setTimeout(r,1000));
+    try{const l=localStorage.getItem('lmc_v8');if(l)D=JSON.parse(l);}catch(_){}
+    document.getElementById('ldm').textContent='離線模式';
+    await new Promise(r=>setTimeout(r,800));
   }
-  // 確保資料結構完整
   if(!D.sales)D.sales={};
   if(!D.purchases)D.purchases={};
   if(!D.staff)D.staff=[];
@@ -195,10 +183,8 @@ async function init(){
   document.getElementById('aw').style.display='block';
   render();
 }
-
 init();
 
-// ── 工具 ────────────────────────────────────────────────
 const fmt=n=>Number(n||0).toLocaleString('zh-TW',{maximumFractionDigits:0});
 const td=()=>new Date().toISOString().slice(0,10);
 const ym=(y,m)=>`${y}-${String(m).padStart(2,'0')}`;
@@ -208,39 +194,38 @@ let CY=nw.getFullYear(),CM=nw.getMonth()+1;
 let AY=CY,BY=CY-1,CMO=CM;
 let saY=CY,saM=CM,puY=CY,puM=CM,moY=CY,moM=CM,acY=CY,acM=CM;
 
-function toast(msg,type='ok'){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.style.background=type==='er'?'#C4706A':'#6B9E78';
-  el.style.color='#fff';el.style.display='block';
-  setTimeout(()=>el.style.display='none',2800);
-}
+function toast(msg,type='ok'){const el=document.getElementById('toast');el.textContent=msg;el.style.background=type==='er'?'#C4706A':'#6B9E78';el.style.color='#fff';el.style.display='block';setTimeout(()=>el.style.display='none',2800);}
 const rLv=(r,g,o)=>r<=g?'g':r<=o?'o':'b';
 const rLb=l=>l==='g'?'✅ 優良':l==='o'?'⚠️ 尚可':'❌ 欠佳';
 const aC=l=>`al al${l}`;
-const gms=(y,m)=>Object.values(D.sales||{}).filter(r=>r.date.startsWith(ym(y,m))).reduce((s,r)=>s+(N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit)),0);
-function getPurchaseTotal(y,m){return Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(ym(y,m))).flatMap(([,a])=>a).reduce((s,p)=>s+N(p.amount),0);}
-function getStaffTotal(y,m){return(D.staff||[]).reduce((s,p)=>{return s+(p.logs||[]).filter(l=>l.date.startsWith(ym(y,m))).reduce((ss,l)=>ss+N(l.hours)*N(p.hourly),0);},0);}
+const gms=(y,m)=>Object.values(D.sales||{}).filter(r=>r.date&&r.date.startsWith(ym(y,m))).reduce((s,r)=>s+(N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit)),0);
+function getPT(y,m){return Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(ym(y,m))).flatMap(([,a])=>Array.isArray(a)?a:Object.values(a)).reduce((s,p)=>s+N(p.amount),0);}
+function getST(y,m){return(D.staff||[]).reduce((s,p)=>{return s+(p.logs||[]).filter(l=>l.date&&l.date.startsWith(ym(y,m))).reduce((ss,l)=>ss+N(l.hours)*N(p.hourly),0);},0);}
 
 let tab='ov';
 function ST(t){tab=t;document.querySelectorAll('.nb').forEach(b=>b.classList.remove('ac'));document.getElementById('nb-'+t).classList.add('ac');render();}
 function render(){const el=document.getElementById('mn');const fn={ov:rOv,sa:rSa,pu:rPu,sf:rSf,mo:rMo,ac:rAc,bg:rBg,an:rAn};el.innerHTML=(fn[tab]||rOv)();}
 
+function getPurchList(y,m){
+  const k=ym(y,m);
+  return Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(k)).flatMap(([,a])=>Array.isArray(a)?a:Object.values(a));
+}
+
 /* ── 總覽 ── */
 function rOv(){
   const k=ym(CY,CM);
-  const sl=Object.values(D.sales||{}).filter(r=>r.date.startsWith(k));
-  const pT=getPurchaseTotal(CY,CM);
+  const sl=Object.values(D.sales||{}).filter(r=>r.date&&r.date.startsWith(k));
+  const pT=getPT(CY,CM);
   const ex=D.expenses?.[k]||{};
-  const manualItems=[...(ex.items||[]),...(ex.extraItems||[])];
-  const manualTotal=manualItems.reduce((s,e)=>s+N(e.amount),0);
-  const tE=manualTotal+pT;
+  const mi=[...(ex.items||[]),...(ex.extraItems||[])];
+  const tE=mi.reduce((s,e)=>s+N(e.amount),0)+pT;
   const tC=sl.reduce((s,r)=>s+N(r.cash),0),tL=sl.reduce((s,r)=>s+N(r.line),0);
   const tU=sl.reduce((s,r)=>s+N(r.uber),0),tPa=sl.reduce((s,r)=>s+N(r.panda),0),tR=sl.reduce((s,r)=>s+N(r.remit),0);
   const tS=tC+tL+tU+tPa+tR,wd=sl.length,net=tS-tE,avg=wd>0?Math.round(tS/wd):0;
-  const stT=getStaffTotal(CY,CM);
-  const purch=Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(k)).flatMap(([,a])=>a);
-  const pA=purch.filter(p=>p.cat==='A').reduce((s,p)=>s+N(p.amount),0);
-  const pB=purch.filter(p=>p.cat==='B').reduce((s,p)=>s+N(p.amount),0);
+  const stT=getST(CY,CM);
+  const pu=getPurchList(CY,CM);
+  const pA=pu.filter(p=>p.cat==='A').reduce((s,p)=>s+N(p.amount),0);
+  const pB=pu.filter(p=>p.cat==='B').reduce((s,p)=>s+N(p.amount),0);
   const pR=tS>0?pT/tS:0,wR=tS>0?stT/tS:0;
   return`<div class="card"><div class="ps"><span style="font-weight:700;color:var(--ac)">📅 期間</span>
     <select onchange="CY=Number(this.value);render()">${YRS().map(y=>`<option ${y===CY?'selected':''}>${y}</option>`).join('')}</select>
@@ -287,7 +272,7 @@ function rOv(){
 /* ── 營業額 ── */
 function rSa(){
   const k=ym(saY,saM);
-  const list=Object.values(D.sales||{}).filter(r=>r.date.startsWith(k)).sort((a,b)=>a.date>b.date?-1:1);
+  const list=Object.values(D.sales||{}).filter(r=>r.date&&r.date.startsWith(k)).sort((a,b)=>a.date>b.date?-1:1);
   const tC=list.reduce((s,r)=>s+N(r.cash),0),tL=list.reduce((s,r)=>s+N(r.line),0);
   const tU=list.reduce((s,r)=>s+N(r.uber),0),tP=list.reduce((s,r)=>s+N(r.panda),0),tR=list.reduce((s,r)=>s+N(r.remit),0);
   const tot=tC+tL+tU+tP+tR;
@@ -343,8 +328,9 @@ function delSale(date){if(!confirm('確定刪除？'))return;delete D.sales[date
 /* ── 進貨 ── */
 function rPu(){
   const k=ym(puY,puM);
-  const en=Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(k)).sort(([a],[b])=>a>b?-1:1);
-  const all=en.flatMap(([,a])=>a);
+  const byDate=D.purchases||{};
+  const entries=Object.entries(byDate).filter(([d])=>d.startsWith(k)).sort(([a],[b])=>a>b?-1:1);
+  const all=entries.flatMap(([,a])=>Array.isArray(a)?a:Object.values(a));
   const tA=all.filter(p=>p.cat==='A').reduce((s,p)=>s+N(p.amount),0);
   const tB=all.filter(p=>p.cat==='B').reduce((s,p)=>s+N(p.amount),0);
   const vs={};all.forEach(p=>{const k2=`${p.cat}__${p.vendor}`;vs[k2]=(vs[k2]||0)+N(p.amount);});
@@ -390,15 +376,16 @@ function rPu(){
       </div>
     </div>
     <div class="tr fw mb8" style="color:var(--ac)">A+B總計：$${fmt(tA+tB)}　<span class="f12 tl">（已自動帶入月結算）</span></div>`:''}
-    ${en.length===0?'<div class="tl" style="text-align:center;padding:12px 0;font-size:13px">本月無進貨記錄</div>':
-      en.map(([d,items])=>`<div style="font-weight:700;color:var(--ac);font-size:12.5px;margin-bottom:2px">${d}</div>
-        ${items.map(p=>`<div class="ri">
+    ${entries.length===0?'<div class="tl" style="text-align:center;padding:12px 0;font-size:13px">本月無進貨記錄</div>':
+      entries.map(([d,items])=>{const arr=Array.isArray(items)?items:Object.values(items);return`
+        <div style="font-weight:700;color:var(--ac);font-size:12.5px;margin-bottom:2px">${d}</div>
+        ${arr.map(p=>`<div class="ri">
           <span class="tg ${p.cat==='A'?'tga':'tgb'}">${p.cat}</span>
           <span class="ts f1" style="font-size:11.5px">${p.vendor}</span>
           <span style="font-size:11.5px">${p.item}</span>
           <span class="fw tc">$${fmt(p.amount)}</span>
           <button class="btn bd2" onclick="delPu('${d}','${p.id}')">刪</button>
-        </div>`).join('')}`).join('')}
+        </div>`).join('')}`;}).join('')}
   </div>`;
 }
 function addPu(){
@@ -408,10 +395,15 @@ function addPu(){
   const item=document.getElementById('pI').value,amt=document.getElementById('pA2').value;
   if(!date||!vendor||!item||!amt){toast('請填寫所有欄位','er');return;}
   if(!D.purchases[date])D.purchases[date]=[];
+  if(!Array.isArray(D.purchases[date]))D.purchases[date]=Object.values(D.purchases[date]);
   D.purchases[date].push({id:`P${Date.now()}`,date,cat,vendor,item,amount:N(amt)});
   save();toast('✅ 已新增');render();
 }
-function delPu(date,id){D.purchases[date]=(D.purchases[date]||[]).filter(p=>p.id!==id);save();toast('已刪除');render();}
+function delPu(date,id){
+  if(!Array.isArray(D.purchases[date]))D.purchases[date]=Object.values(D.purchases[date]);
+  D.purchases[date]=(D.purchases[date]||[]).filter(p=>p.id!==id);
+  save();toast('已刪除');render();
+}
 
 /* ── 人事 ── */
 function rSf(){
@@ -430,71 +422,49 @@ function rSf(){
       const totS=totH*N(p.hourly);
       return`<div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div>
-            <div style="font-weight:700;font-size:14px;color:var(--ac)">${p.name}</div>
-            <div class="f12 ts">時薪 $${fmt(p.hourly)}／累計工時 ${totH}h／薪資 $${fmt(totS)}</div>
-          </div>
+          <div><div style="font-weight:700;font-size:14px;color:var(--ac)">${p.name}</div>
+          <div class="f12 ts">時薪 $${fmt(p.hourly)}／累計 ${totH}h／$${fmt(totS)}</div></div>
           <button class="btn bd2" onclick="delSf('${p.id}')">刪除</button>
         </div>
-        <div style="font-weight:600;font-size:12.5px;color:var(--ac);margin-bottom:7px">新增工時記錄</div>
         <div class="g2 mb8">
           <div><label class="lb2">日期</label><input type="date" id="sh_${p.id}_d" value="${td()}"></div>
           <div><label class="lb2">工時（小時）</label><input type="number" id="sh_${p.id}_h" placeholder="0"></div>
         </div>
         <div class="mb8"><label class="lb2">備註</label><input type="text" id="sh_${p.id}_n" placeholder="選填"></div>
-        <button class="btn bs bfull" onclick="addStaffLog('${p.id}')">新增工時</button>
+        <button class="btn bs bfull" onclick="addSL('${p.id}')">新增工時</button>
         <div class="dv"></div>
-        <div class="f12 ts mb8">最近記錄</div>
         ${[...allH].reverse().slice(0,5).map((l,i)=>`
-          <div class="ri">
-            <span class="ts" style="font-size:11px">${l.date}</span>
-            <span class="f1 f12">${l.note||''}</span>
-            <span class="fw tc">${l.hours}h = $${fmt(N(l.hours)*N(p.hourly))}</span>
-            <button class="btn bd2" onclick="delStaffLog('${p.id}',${allH.length-1-i})">刪</button>
-          </div>`).join('')}
+          <div class="ri"><span class="ts" style="font-size:11px">${l.date}</span>
+          <span class="f1 f12">${l.note||''}</span>
+          <span class="fw tc">${l.hours}h=$${fmt(N(l.hours)*N(p.hourly))}</span>
+          <button class="btn bd2" onclick="delSL('${p.id}',${allH.length-1-i})">刪</button></div>`).join('')}
       </div>`;
     }).join('')}`;
 }
-function addSf(){
-  const n=document.getElementById('stN').value,h=document.getElementById('stH').value;
-  if(!n||!h){toast('請填寫姓名與時薪','er');return;}
-  if(!D.staff)D.staff=[];
-  D.staff.push({id:`ST${Date.now()}`,name:n,hourly:N(h),logs:[]});
-  save();toast('✅ 已新增');render();
-}
-function delSf(id){if(!confirm('確定刪除此人員？'))return;D.staff=D.staff.filter(p=>p.id!==id);save();toast('已刪除');render();}
-function addStaffLog(id){
-  const date=document.getElementById(`sh_${id}_d`).value;
-  const hours=document.getElementById(`sh_${id}_h`).value;
-  const note=document.getElementById(`sh_${id}_n`).value;
+function addSf(){const n=document.getElementById('stN').value,h=document.getElementById('stH').value;if(!n||!h){toast('請填寫姓名與時薪','er');return;}if(!D.staff)D.staff=[];D.staff.push({id:`ST${Date.now()}`,name:n,hourly:N(h),logs:[]});save();toast('✅ 已新增');render();}
+function delSf(id){if(!confirm('確定刪除？'))return;D.staff=D.staff.filter(p=>p.id!==id);save();toast('已刪除');render();}
+function addSL(id){
+  const date=document.getElementById(`sh_${id}_d`).value,hours=document.getElementById(`sh_${id}_h`).value,note=document.getElementById(`sh_${id}_n`).value;
   if(!date||!hours){toast('請填寫日期與工時','er');return;}
-  const p=D.staff.find(x=>x.id===id);
-  if(!p.logs)p.logs=[];
-  p.logs.push({date,hours:N(hours),note});
-  save();toast('✅ 已新增');render();
+  const p=D.staff.find(x=>x.id===id);if(!p.logs)p.logs=[];
+  p.logs.push({date,hours:N(hours),note});save();toast('✅ 已新增');render();
 }
-function delStaffLog(id,idx){
-  const p=D.staff.find(x=>x.id===id);
-  if(p&&p.logs)p.logs.splice(idx,1);
-  save();toast('已刪除');render();
-}
+function delSL(id,idx){const p=D.staff.find(x=>x.id===id);if(p&&p.logs)p.logs.splice(idx,1);save();toast('已刪除');render();}
 
 /* ── 月結算 ── */
 function rMo(){
   const k=ym(moY,moM),ex=D.expenses?.[k]||{};
   const items=ex.items||EXPOPTS.map(l=>({label:l,amount:''}));
   const ei=ex.extraItems||[];
-  const pT=getPurchaseTotal(moY,moM);
-  const stT=getStaffTotal(moY,moM);
-  const sl=Object.values(D.sales||{}).filter(r=>r.date.startsWith(k));
+  const pT=getPT(moY,moM),stT=getST(moY,moM);
+  const sl=Object.values(D.sales||{}).filter(r=>r.date&&r.date.startsWith(k));
   const tS=sl.reduce((s,r)=>s+(N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit)),0),wd=sl.length;
-  const manualTotal=[...items,...ei].reduce((s,e)=>s+N(e.amount),0);
-  const tE=manualTotal+pT;
-  const net=tS-tE,avg=wd>0?Math.round(tS/wd):0;
+  const manT=[...items,...ei].reduce((s,e)=>s+N(e.amount),0);
+  const tE=manT+pT,net=tS-tE,avg=wd>0?Math.round(tS/wd):0;
+  const pu=getPurchList(moY,moM);
+  const pA=pu.filter(p=>p.cat==='A').reduce((s,p)=>s+N(p.amount),0);
+  const pB=pu.filter(p=>p.cat==='B').reduce((s,p)=>s+N(p.amount),0);
   const pR=tS>0?pT/tS:0,wR=tS>0?stT/tS:0;
-  const purch=Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(k)).flatMap(([,a])=>a);
-  const pA=purch.filter(p=>p.cat==='A').reduce((s,p)=>s+N(p.amount),0);
-  const pB=purch.filter(p=>p.cat==='B').reduce((s,p)=>s+N(p.amount),0);
   return`<div class="card"><div class="ih">
     <span style="font-weight:700;color:var(--ac)">📋 月份</span>
     <select onchange="moY=Number(this.value);render()">${YRS().map(y=>`<option ${y===moY?'selected':''}>${y}</option>`).join('')}</select>
@@ -523,10 +493,10 @@ function rMo(){
       <div class="st"><div class="sv tc">$${fmt(pT)}</div><div class="sl">進貨總額</div></div>
     </div>
     <div class="${aC(rLv(pR,.3,.4))}">${rLb(rLv(pR,.3,.4))}　進貨佔比 ${(pR*100).toFixed(1)}%（A $${fmt(pA)} B $${fmt(pB)}）</div>
-    <div class="${aC(rLv(wR,.25,.35))}">${rLb(rLv(wR,.25,.35))}　人事佔比 ${(wR*100).toFixed(1)}%（本月 $${fmt(stT)}）</div>
+    <div class="${aC(rLv(wR,.25,.35))}">${rLb(rLv(wR,.25,.35))}　人事佔比 ${(wR*100).toFixed(1)}%（$${fmt(stT)}）</div>
     <div class="dv"></div>
     <div class="f12 fw ts mb8">支出明細</div>
-    <div class="vr f12"><span style="color:var(--p);font-weight:700">進貨費用（自動）</span><span class="fw trd">$${fmt(pT)}</span></div>
+    <div class="vr f12"><span style="color:var(--p);font-weight:700">進貨（自動）</span><span class="fw trd">$${fmt(pT)}</span></div>
     ${[...items,...ei].filter(e=>N(e.amount)>0).map(e=>`<div class="vr f12"><span class="ts">${e.label}</span><span class="fw trd">$${fmt(e.amount)}</span></div>`).join('')}
     <div class="dv"></div>
     <div class="vr fw f12"><span style="color:var(--ac)">總支出合計</span><span class="trd">$${fmt(tE)}</span></div>
@@ -591,9 +561,7 @@ function delAc(k,i){D.acct[k].splice(i,1);save();toast('已刪除');render();}
 /* ── 存錢袋 ── */
 function rBg(){
   const bag=D.bag||{};
-  return`<div class="card"><div class="ct">💼 存錢袋管理</div>
-    <div class="f12 tl">各項目獨立管理，隨時記錄</div>
-  </div>
+  return`<div class="card"><div class="ct">💼 存錢袋管理</div><div class="f12 tl">各項目獨立管理</div></div>
   ${BAGITEMS.map(name=>{
     const b=bag[name]||{logs:[]};
     const tot=b.logs.reduce((s,l)=>l.type==='存入'?s+N(l.amount):s-N(l.amount),0);
@@ -601,12 +569,10 @@ function rBg(){
     return`<div class="card">
       <div style="font-weight:700;color:var(--ac);font-size:14px;margin-bottom:5px">📦 ${name}</div>
       <div style="font-size:22px;font-weight:700;color:${tot>=0?'var(--p)':'var(--rd)'};margin-bottom:3px">$${fmt(tot)}</div>
-      <div class="f12 tl mb8">目前累積金額</div>
+      <div class="f12 tl mb8">目前累積</div>
       <div class="g2 mb8">
         <div><label class="lb2">金額</label><input type="number" id="bg_${name}_a" placeholder="輸入金額"></div>
-        <div><label class="lb2">類型</label>
-          <select id="bg_${name}_t">${BAGTYPES.map(t=>`<option>${t}</option>`).join('')}</select>
-        </div>
+        <div><label class="lb2">類型</label><select id="bg_${name}_t">${BAGTYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
       </div>
       <div class="mb8"><label class="lb2">備註</label><input type="text" id="bg_${name}_n" placeholder="選填"></div>
       <div class="g2">
@@ -624,9 +590,7 @@ function rBg(){
   }).join('')}`;
 }
 function addBag(name){
-  const amt=document.getElementById(`bg_${name}_a`).value;
-  const type=document.getElementById(`bg_${name}_t`).value;
-  const note=document.getElementById(`bg_${name}_n`).value;
+  const amt=document.getElementById(`bg_${name}_a`).value,type=document.getElementById(`bg_${name}_t`).value,note=document.getElementById(`bg_${name}_n`).value;
   if(!amt){toast('請輸入金額','er');return;}
   if(!D.bag)D.bag={};if(!D.bag[name])D.bag[name]={logs:[]};
   D.bag[name].logs.push({date:td(),type,amount:N(amt),note});
@@ -645,14 +609,14 @@ function rAn(){
   const px=i=>35+i*50+25,py=v=>13+(1-v/mxV)*112;
   return`<div class="card"><div class="ct">📈 年度比較</div>
     <div class="g2 mb8">
-      <div><label class="lb2">年份 A（主）</label><select onchange="AY=Number(this.value);render()">${YRS().map(y=>`<option ${y===AY?'selected':''}>${y}</option>`).join('')}</select></div>
-      <div><label class="lb2">年份 B（對比）</label><select onchange="BY=Number(this.value);render()">${YRS().map(y=>`<option ${y===BY?'selected':''}>${y}</option>`).join('')}</select></div>
+      <div><label class="lb2">年份 A</label><select onchange="AY=Number(this.value);render()">${YRS().map(y=>`<option ${y===AY?'selected':''}>${y}</option>`).join('')}</select></div>
+      <div><label class="lb2">年份 B</label><select onchange="BY=Number(this.value);render()">${YRS().map(y=>`<option ${y===BY?'selected':''}>${y}</option>`).join('')}</select></div>
     </div>
     <div class="g2 mb8">
-      <div class="st"><div class="sv tc">$${fmt(tA)}</div><div class="sl">${AY} 年度總額</div></div>
-      <div class="st"><div class="sv" style="color:var(--ac)">$${fmt(tB)}</div><div class="sl">${BY} 年度總額</div></div>
+      <div class="st"><div class="sv tc">$${fmt(tA)}</div><div class="sl">${AY} 年度</div></div>
+      <div class="st"><div class="sv" style="color:var(--ac)">$${fmt(tB)}</div><div class="sl">${BY} 年度</div></div>
     </div>
-    ${yoy!==null?`<div class="tr fw mb8" style="font-size:14px;color:${N(yoy)>=0?'var(--gn)':'var(--rd)'}">年度成長率：${N(yoy)>=0?'+':''}${yoy}%</div>`:''}
+    ${yoy!==null?`<div class="tr fw mb8" style="font-size:14px;color:${N(yoy)>=0?'var(--gn)':'var(--rd)'}">年度成長：${N(yoy)>=0?'+':''}${yoy}%</div>`:''}
     <div class="cw"><svg width="${W}" height="${H}" style="display:block">
       ${[0,.25,.5,.75,1].map(r=>`<line x1="35" y1="${13+(1-r)*112}" x2="${35+12*50}" y2="${13+(1-r)*112}" stroke="#F0E8DC" stroke-width="1"/>`).join('')}
       ${MOS.map((m,i)=>`<text x="${px(i)}" y="${H-4}" text-anchor="middle" font-size="9" fill="#A89080">${m}月</text>`).join('')}
@@ -672,9 +636,9 @@ function rAn(){
       <div class="st"><div class="sv tc">$${fmt(mA)}</div><div class="sl">${AY}/${CMO}月</div></div>
       <div class="st"><div class="sv" style="color:var(--ac)">$${fmt(mP)}</div><div class="sl">上月</div></div>
     </div>
-    ${mom!==null?`<div class="tr fw mb8" style="font-size:14px;color:${N(mom)>=0?'var(--gn)':'var(--rd)'}">月成長率：${N(mom)>=0?'+':''}${mom}%</div>`:''}
+    ${mom!==null?`<div class="tr fw mb8" style="font-size:14px;color:${N(mom)>=0?'var(--gn)':'var(--rd)'}">月成長：${N(mom)>=0?'+':''}${mom}%</div>`:''}
     <div class="dv"></div>
-    <div style="font-weight:600;font-size:12.5px;color:var(--ac);margin-bottom:7px">${AY} 年各月（點選比較）</div>
+    <div style="font-weight:600;font-size:12.5px;color:var(--ac);margin-bottom:7px">${AY} 年各月</div>
     <div class="g4">
       ${MOS.map(m=>{const v=gms(AY,m);const pv=m>1?gms(AY,m-1):null;const g=pv?((v-pv)/pv*100).toFixed(0):null;return`
         <div class="mi ${m===CMO?'ac2':''}" onclick="CMO=${m};render()">
@@ -693,7 +657,7 @@ function doExport(){
   Object.values(D.sales||{}).sort((a,b)=>a.date>b.date?1:-1).forEach(r=>sR.push([r.id,r.date,N(r.cash),N(r.line),N(r.uber),N(r.panda),N(r.remit),N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit)]));
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sR),'每日營業額');
   const pR=[['單號','日期','類別','廠商','品項','金額']];
-  Object.entries(D.purchases||{}).sort(([a],[b])=>a>b?1:-1).forEach(([,arr])=>arr.forEach(r=>pR.push([r.id,r.date,r.cat,r.vendor,r.item,r.amount])));
+  Object.entries(D.purchases||{}).sort(([a],[b])=>a>b?1:-1).forEach(([,arr])=>{const a=Array.isArray(arr)?arr:Object.values(arr);a.forEach(r=>pR.push([r.id,r.date,r.cat,r.vendor,r.item,r.amount]));});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(pR),'進貨記錄');
   const stR=[['姓名','日期','工時','時薪','薪資','備註']];
   (D.staff||[]).forEach(p=>(p.logs||[]).forEach(l=>stR.push([p.name,l.date,l.hours,p.hourly,N(l.hours)*N(p.hourly),l.note||''])));
@@ -702,7 +666,7 @@ function doExport(){
   Object.entries(D.expenses||{}).sort(([a],[b])=>a>b?1:-1).forEach(([k,{items=[],extraItems=[]}])=>{items.forEach(it=>eR.push([k,it.label,it.amount||0,'否']));extraItems.forEach(it=>eR.push([k,it.label,it.amount||0,'是']));});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(eR),'月支出');
   const acR=[['年月','日期','類型','金額','說明']];
-  Object.entries(D.acct||{}).sort(([a],[b])=>a>b?1:-1).forEach(([k,logs])=>logs.forEach(l=>acR.push([k,l.date,l.type,l.amount,l.note||''])));
+  Object.entries(D.acct||{}).sort(([a],[b])=>a>b?1:-1).forEach(([k,logs])=>{if(Array.isArray(logs))logs.forEach(l=>acR.push([k,l.date,l.type,l.amount,l.note||'']));});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(acR),'公司帳戶');
   XLSX.writeFile(wb,`涼麵陳_${td()}.xlsx`);toast('✅ 匯出成功');
 }
