@@ -8,15 +8,9 @@
 <meta name="apple-mobile-web-app-title" content="涼麵陳">
 <title>涼麵陳 營運管理</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-const cfg={apiKey:"AIzaSyBMYSOEEMieeemojw5jArxCG_3pG2GPhgk",authDomain:"liangmianchen-e0d6a.firebaseapp.com",projectId:"liangmianchen-e0d6a",storageBucket:"liangmianchen-e0d6a.firebasestorage.app",messagingSenderId:"804649622117",appId:"1:804649622117:web:5ed418f67bc5826efc448c"};
-const fb=initializeApp(cfg);const fs=getFirestore(fb);const REF=doc(fs,"lmc","main");
-window._fbLoad=async()=>{try{const s=await getDoc(REF);if(s.exists())return s.data();}catch(e){}return null;};
-window._fbSave=async(d)=>{try{await setDoc(REF,d);return true;}catch(e){return false;}};
-window._fbReady=true;window.dispatchEvent(new Event('fb-ready'));
-</script>
+<!-- Firebase SDK (compat版本，更穩定) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 :root{--bg:#FAF6F1;--sf:#FDF9F5;--card:#FFF;--bd:#E8DDD0;--bdl:#F0E8DC;--p:#C4956A;--pl:#E8D5BE;--pd:#A67852;--ac:#8B6347;--tx:#3D2B1F;--su:#7A6355;--lt:#A89080;--gn:#6B9E78;--rd:#C4706A;--yw:#C4A96A;--bl:#6A8EC4;--sh:rgba(196,149,106,0.13);}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -84,13 +78,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .vr{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:2px;}
 .er{display:flex;align-items:center;gap:7px;margin-bottom:6px;}
 .er label{font-size:12px;color:var(--su);font-weight:600;width:110px;flex-shrink:0;}
-.er-auto{display:flex;align-items:center;gap:7px;margin-bottom:6px;opacity:.8;}
-.er-auto label{font-size:12px;color:var(--p);font-weight:700;width:110px;flex-shrink:0;}
 .xr{display:flex;gap:6px;align-items:center;margin-bottom:5px;}
 .xr input:first-child{width:90px;flex-shrink:0;}
-.bag-wrap{background:var(--sf);border-radius:12px;padding:13px;border:1px solid var(--bdl);margin-bottom:9px;}
-.bag-nm{font-weight:700;color:var(--ac);font-size:14px;margin-bottom:5px;}
-.bag-amt{font-size:22px;font-weight:700;margin-bottom:3px;}
 @media(max-width:400px){.g3{grid-template-columns:1fr 1fr;}.g4{grid-template-columns:1fr 1fr;}}
 </style>
 </head>
@@ -100,7 +89,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="hd">
     <div class="logo">涼麵陳</div>
     <div class="hbtns">
-      <div class="cd" id="cdot"></div>
+      <div class="cd" id="cdot" title="雲端狀態"></div>
       <button class="hb" onclick="doExport()">📥匯出</button>
     </div>
   </div>
@@ -118,6 +107,20 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div>
 <div id="toast"></div>
 <script>
+// ── Firebase 初始化 (compat 版) ──────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBMYSOEEMieeemojw5jArxCG_3pG2GPhgk",
+  authDomain: "liangmianchen-e0d6a.firebaseapp.com",
+  projectId: "liangmianchen-e0d6a",
+  storageBucket: "liangmianchen-e0d6a.firebasestorage.app",
+  messagingSenderId: "804649622117",
+  appId: "1:804649622117:web:5ed418f67bc5826efc448c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const DOC = db.collection("lmc").doc("main");
+
+// ── 常數 ────────────────────────────────────────────────
 const VA=['立成製麵','櫳樺','陳家麻醬','晨新商行','浤浰商行','源臻有限公司','其他'];
 const VB=['好鄰居','浤浰商行','茉莉商行','小北百貨','其他'];
 const EXPOPTS=['店租','貸款','電費','水費','瓦斯','人事薪資','UberEats服務費','熊貓佣金','其他'];
@@ -128,26 +131,74 @@ const YRS=()=>{const y=new Date().getFullYear();return[y-2,y-1,y,y+1];};
 
 let D={sales:{},purchases:{},staff:[],expenses:{},acct:{},bag:{}};
 let svT=null;
+let fbOk=false;
 
-function setDot(s){const d=document.getElementById('cdot');if(!d)return;d.className='cd'+(s==='ok'?' ok':s==='er'?' er':'');}
-async function cSave(){setDot('');const ok=await window._fbSave(JSON.parse(JSON.stringify(D)));setDot(ok?'ok':'er');if(!ok)toast('⚠️ 雲端儲存失敗','er');}
-function save(){try{localStorage.setItem('lmc_v6',JSON.stringify(D));}catch(_){}clearTimeout(svT);svT=setTimeout(()=>cSave(),900);}
+function setDot(s){
+  const d=document.getElementById('cdot');
+  if(!d)return;
+  d.className='cd'+(s==='ok'?' ok':s==='er'?' er':'');
+  d.title=s==='ok'?'☁️ 雲端已同步':s==='er'?'⚠️ 同步失敗':'同步中…';
+}
+
+async function cloudSave(){
+  setDot('');
+  try{
+    await DOC.set(JSON.parse(JSON.stringify(D)));
+    setDot('ok');fbOk=true;
+  }catch(e){
+    console.error('Save error:',e);
+    setDot('er');
+    toast('⚠️ 雲端儲存失敗：'+e.message,'er');
+  }
+}
+
+function save(){
+  try{localStorage.setItem('lmc_v7',JSON.stringify(D));}catch(_){}
+  clearTimeout(svT);
+  svT=setTimeout(()=>cloudSave(),800);
+}
 
 async function init(){
-  document.getElementById('ldm').textContent='載入資料中…';
-  if(window._fbLoad){const cd=await window._fbLoad();if(cd&&cd.sales){D=cd;setDot('ok');}else{try{const l=localStorage.getItem('lmc_v6');if(l)D=JSON.parse(l);}catch(_){}}}
-  else{try{const l=localStorage.getItem('lmc_v6');if(l)D=JSON.parse(l);}catch(_){}}
-  if(!D.bag)D.bag={};
-  if(!D.acct)D.acct={};
+  document.getElementById('ldm').textContent='載入雲端資料中…';
+  try{
+    const snap=await DOC.get();
+    if(snap.exists){
+      D=snap.data();
+      fbOk=true;
+      setDot('ok');
+      document.getElementById('ldm').textContent='載入完成！';
+    } else {
+      // 嘗試從 localStorage 恢復
+      try{const l=localStorage.getItem('lmc_v7');if(l)D=JSON.parse(l);}catch(_){}
+      try{const l=localStorage.getItem('lmc_v6');if(l)D=JSON.parse(l);}catch(_){}
+      try{const l=localStorage.getItem('lmc_v5');if(l)D=JSON.parse(l);}catch(_){}
+      setDot('ok');
+    }
+  }catch(e){
+    console.error('Load error:',e);
+    setDot('er');
+    // 從 localStorage 恢復
+    try{const l=localStorage.getItem('lmc_v7');if(l)D=JSON.parse(l);}catch(_){}
+    try{const l=localStorage.getItem('lmc_v6');if(l)D=JSON.parse(l);}catch(_){}
+    document.getElementById('ldm').textContent='離線模式（'+e.code+')';
+    await new Promise(r=>setTimeout(r,1000));
+  }
+  // 確保資料結構完整
+  if(!D.sales)D.sales={};
+  if(!D.purchases)D.purchases={};
   if(!D.staff)D.staff=[];
+  if(!D.expenses)D.expenses={};
+  if(!D.acct)D.acct={};
+  if(!D.bag)D.bag={};
   BAGITEMS.forEach(k=>{if(!D.bag[k])D.bag[k]={logs:[]};});
   document.getElementById('ld').style.display='none';
   document.getElementById('aw').style.display='block';
   render();
 }
-if(window._fbReady){init();}
-else{window.addEventListener('fb-ready',()=>init());setTimeout(()=>{if(document.getElementById('ld').style.display!=='none'){document.getElementById('ldm').textContent='離線模式';setTimeout(()=>init(),400);}},3000);}
 
+init();
+
+// ── 工具 ────────────────────────────────────────────────
 const fmt=n=>Number(n||0).toLocaleString('zh-TW',{maximumFractionDigits:0});
 const td=()=>new Date().toISOString().slice(0,10);
 const ym=(y,m)=>`${y}-${String(m).padStart(2,'0')}`;
@@ -157,28 +208,18 @@ let CY=nw.getFullYear(),CM=nw.getMonth()+1;
 let AY=CY,BY=CY-1,CMO=CM;
 let saY=CY,saM=CM,puY=CY,puM=CM,moY=CY,moM=CM,acY=CY,acM=CM;
 
-// 取得某月進貨總額
-function getPurchaseTotal(y,m){
-  const k=ym(y,m);
-  return Object.entries(D.purchases||{})
-    .filter(([d])=>d.startsWith(k))
-    .flatMap(([,a])=>a)
-    .reduce((s,p)=>s+N(p.amount),0);
+function toast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.style.background=type==='er'?'#C4706A':'#6B9E78';
+  el.style.color='#fff';el.style.display='block';
+  setTimeout(()=>el.style.display='none',2800);
 }
-// 取得某月人事總薪資
-function getStaffTotal(y,m){
-  const k=ym(y,m);
-  return (D.staff||[]).reduce((s,p)=>{
-    const logs=(p.logs||[]).filter(l=>l.date.startsWith(k));
-    return s+logs.reduce((ss,l)=>ss+N(l.hours)*N(p.hourly),0);
-  },0);
-}
-
-function toast(msg,type='ok'){const el=document.getElementById('toast');el.textContent=msg;el.style.background=type==='er'?'#C4706A':'#6B9E78';el.style.color='#fff';el.style.display='block';setTimeout(()=>el.style.display='none',2400);}
 const rLv=(r,g,o)=>r<=g?'g':r<=o?'o':'b';
 const rLb=l=>l==='g'?'✅ 優良':l==='o'?'⚠️ 尚可':'❌ 欠佳';
 const aC=l=>`al al${l}`;
 const gms=(y,m)=>Object.values(D.sales||{}).filter(r=>r.date.startsWith(ym(y,m))).reduce((s,r)=>s+(N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit)),0);
+function getPurchaseTotal(y,m){return Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(ym(y,m))).flatMap(([,a])=>a).reduce((s,p)=>s+N(p.amount),0);}
+function getStaffTotal(y,m){return(D.staff||[]).reduce((s,p)=>{return s+(p.logs||[]).filter(l=>l.date.startsWith(ym(y,m))).reduce((ss,l)=>ss+N(l.hours)*N(p.hourly),0);},0);}
 
 let tab='ov';
 function ST(t){tab=t;document.querySelectorAll('.nb').forEach(b=>b.classList.remove('ac'));document.getElementById('nb-'+t).classList.add('ac');render();}
@@ -192,15 +233,15 @@ function rOv(){
   const ex=D.expenses?.[k]||{};
   const manualItems=[...(ex.items||[]),...(ex.extraItems||[])];
   const manualTotal=manualItems.reduce((s,e)=>s+N(e.amount),0);
-  const tE=manualTotal+pT; // 總支出 = 手動支出 + 進貨
+  const tE=manualTotal+pT;
   const tC=sl.reduce((s,r)=>s+N(r.cash),0),tL=sl.reduce((s,r)=>s+N(r.line),0);
   const tU=sl.reduce((s,r)=>s+N(r.uber),0),tPa=sl.reduce((s,r)=>s+N(r.panda),0),tR=sl.reduce((s,r)=>s+N(r.remit),0);
   const tS=tC+tL+tU+tPa+tR,wd=sl.length,net=tS-tE,avg=wd>0?Math.round(tS/wd):0;
   const stT=getStaffTotal(CY,CM);
-  const pR=tS>0?pT/tS:0,wR=tS>0?stT/tS:0;
   const purch=Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(k)).flatMap(([,a])=>a);
   const pA=purch.filter(p=>p.cat==='A').reduce((s,p)=>s+N(p.amount),0);
   const pB=purch.filter(p=>p.cat==='B').reduce((s,p)=>s+N(p.amount),0);
+  const pR=tS>0?pT/tS:0,wR=tS>0?stT/tS:0;
   return`<div class="card"><div class="ps"><span style="font-weight:700;color:var(--ac)">📅 期間</span>
     <select onchange="CY=Number(this.value);render()">${YRS().map(y=>`<option ${y===CY?'selected':''}>${y}</option>`).join('')}</select>
     <select onchange="CM=Number(this.value);render()">${MOS.map(m=>`<option value="${m}" ${m===CM?'selected':''}>${m}月</option>`).join('')}</select></div></div>
@@ -443,44 +484,33 @@ function rMo(){
   const k=ym(moY,moM),ex=D.expenses?.[k]||{};
   const items=ex.items||EXPOPTS.map(l=>({label:l,amount:''}));
   const ei=ex.extraItems||[];
-
-  // 自動計算進貨與人事
   const pT=getPurchaseTotal(moY,moM);
   const stT=getStaffTotal(moY,moM);
-
   const sl=Object.values(D.sales||{}).filter(r=>r.date.startsWith(k));
   const tS=sl.reduce((s,r)=>s+(N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit)),0),wd=sl.length;
-
-  // 手動支出小計
   const manualTotal=[...items,...ei].reduce((s,e)=>s+N(e.amount),0);
-  // 總支出 = 手動支出 + 進貨（自動）
   const tE=manualTotal+pT;
   const net=tS-tE,avg=wd>0?Math.round(tS/wd):0;
   const pR=tS>0?pT/tS:0,wR=tS>0?stT/tS:0;
-
   const purch=Object.entries(D.purchases||{}).filter(([d])=>d.startsWith(k)).flatMap(([,a])=>a);
   const pA=purch.filter(p=>p.cat==='A').reduce((s,p)=>s+N(p.amount),0);
   const pB=purch.filter(p=>p.cat==='B').reduce((s,p)=>s+N(p.amount),0);
-
   return`<div class="card"><div class="ih">
     <span style="font-weight:700;color:var(--ac)">📋 月份</span>
     <select onchange="moY=Number(this.value);render()">${YRS().map(y=>`<option ${y===moY?'selected':''}>${y}</option>`).join('')}</select>
     <select onchange="moM=Number(this.value);render()">${MOS.map(m=>`<option value="${m}" ${m===moM?'selected':''}>${m}月</option>`).join('')}</select>
     <span class="f11 tl">各月獨立填寫</span>
   </div></div>
-
   <div class="card"><div class="ct">💸 當月支出填寫</div>
     <div style="background:var(--pl);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:var(--pd)">
-      🔒 進貨費用自動帶入：A食材 $${fmt(pA)} + B耗材 $${fmt(pB)} = <strong>$${fmt(pT)}</strong>（不需手動填寫）
+      🔒 進貨自動帶入：A $${fmt(pA)} + B $${fmt(pB)} = <strong>$${fmt(pT)}</strong>
     </div>
-    <div style="font-weight:600;font-size:12.5px;color:var(--su);margin-bottom:8px">其他支出（手動填寫）</div>
     ${items.map((it,i)=>`<div class="er"><label>${it.label}</label><input type="number" placeholder="填入金額" value="${it.amount||''}" onchange="updEI(${i},this.value)"></div>`).join('')}
     <div class="dv"></div>
     <div style="font-weight:600;color:var(--ac);font-size:12.5px;margin-bottom:7px">自訂支出</div>
     ${ei.map((it,i)=>`<div class="xr"><input type="text" placeholder="項目" value="${it.label}" onchange="updEX(${i},'label',this.value)"><input type="number" placeholder="金額" value="${it.amount||''}" onchange="updEX(${i},'amount',this.value)"><button class="btn bd2" onclick="delEX(${i})">刪</button></div>`).join('')}
     <div class="xr mt8"><input type="text" id="nEL" placeholder="新項目名稱"><input type="number" id="nEA" placeholder="金額"><button class="btn bs" onclick="addEX()">新增</button></div>
   </div>
-
   <div class="card"><div class="ct">📊 月結損益</div>
     <div class="g2 mb8">
       <div class="st"><div class="sv tc">$${fmt(tS)}</div><div class="sl">當月總營業額</div></div>
@@ -493,13 +523,13 @@ function rMo(){
       <div class="st"><div class="sv tc">$${fmt(pT)}</div><div class="sl">進貨總額</div></div>
     </div>
     <div class="${aC(rLv(pR,.3,.4))}">${rLb(rLv(pR,.3,.4))}　進貨佔比 ${(pR*100).toFixed(1)}%（A $${fmt(pA)} B $${fmt(pB)}）</div>
-    <div class="${aC(rLv(wR,.25,.35))}">${rLb(rLv(wR,.25,.35))}　人事佔比 ${(wR*100).toFixed(1)}%（本月計算值 $${fmt(stT)}）</div>
+    <div class="${aC(rLv(wR,.25,.35))}">${rLb(rLv(wR,.25,.35))}　人事佔比 ${(wR*100).toFixed(1)}%（本月 $${fmt(stT)}）</div>
     <div class="dv"></div>
     <div class="f12 fw ts mb8">支出明細</div>
-    <div class="vr f12" style="color:var(--p)"><span class="fw">進貨費用（自動）</span><span class="fw trd">$${fmt(pT)}</span></div>
+    <div class="vr f12"><span style="color:var(--p);font-weight:700">進貨費用（自動）</span><span class="fw trd">$${fmt(pT)}</span></div>
     ${[...items,...ei].filter(e=>N(e.amount)>0).map(e=>`<div class="vr f12"><span class="ts">${e.label}</span><span class="fw trd">$${fmt(e.amount)}</span></div>`).join('')}
     <div class="dv"></div>
-    <div class="vr f12 fw"><span style="color:var(--ac)">總支出合計</span><span class="trd">$${fmt(tE)}</span></div>
+    <div class="vr fw f12"><span style="color:var(--ac)">總支出合計</span><span class="trd">$${fmt(tE)}</span></div>
   </div>`;
 }
 function gEx(k){const d=D.expenses?.[k]||{};return{items:d.items||EXPOPTS.map(l=>({label:l,amount:''})),extraItems:d.extraItems||[]};}
@@ -569,8 +599,8 @@ function rBg(){
     const tot=b.logs.reduce((s,l)=>l.type==='存入'?s+N(l.amount):s-N(l.amount),0);
     const rec=[...(b.logs||[])].reverse().slice(0,6);
     return`<div class="card">
-      <div class="bag-nm">📦 ${name}</div>
-      <div class="bag-amt" style="color:${tot>=0?'var(--p)':'var(--rd)'}">$${fmt(tot)}</div>
+      <div style="font-weight:700;color:var(--ac);font-size:14px;margin-bottom:5px">📦 ${name}</div>
+      <div style="font-size:22px;font-weight:700;color:${tot>=0?'var(--p)':'var(--rd)'};margin-bottom:3px">$${fmt(tot)}</div>
       <div class="f12 tl mb8">目前累積金額</div>
       <div class="g2 mb8">
         <div><label class="lb2">金額</label><input type="number" id="bg_${name}_a" placeholder="輸入金額"></div>
@@ -586,7 +616,7 @@ function rBg(){
       ${rec.length>0?`<div class="dv"></div>
         ${rec.map(l=>`<div class="ri">
           <span class="ts" style="font-size:11px">${l.date}</span>
-          <span class="tg ${l.type==='存入'?'tgca':'tgub'}">${l.type}</span>
+          <span class="tg ${l.type==='存入'?'tgca':'tgout'}">${l.type}</span>
           <span class="f1 f12">${l.note||''}</span>
           <span class="fw ${l.type==='存入'?'tgn':'trd'}">${l.type==='存入'?'+':'-'}$${fmt(l.amount)}</span>
         </div>`).join('')}`:''}
