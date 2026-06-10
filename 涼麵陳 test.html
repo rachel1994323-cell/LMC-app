@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Firebase 連線測試</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+body{font-family:sans-serif;padding:20px;background:#FAF6F1;}
+.box{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid #E8DDD0;}
+.ok{color:#6B9E78;font-weight:700;}
+.er{color:#C4706A;font-weight:700;}
+pre{font-size:12px;background:#f5f5f5;padding:10px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;}
+</style>
+</head>
+<body>
+<div class="box"><h2 style="margin:0;color:#8B6347">🔥 Firebase 連線診斷</h2></div>
+<div class="box" id="log">載入中…</div>
+<script>
+const log = document.getElementById('log');
+function addLine(msg, type=''){
+  const p = document.createElement('p');
+  p.style.margin='4px 0';
+  p.className = type;
+  p.textContent = msg;
+  log.appendChild(p);
+}
+log.textContent='';
+addLine('Step 1: Firebase SDK 載入中...');
+
+try {
+  const cfg = {
+    apiKey: "AIzaSyBMYSOEEMieeemojw5jArxCG_3pG2GPhgk",
+    authDomain: "liangmianchen-e0d6a.firebaseapp.com",
+    projectId: "liangmianchen-e0d6a",
+    storageBucket: "liangmianchen-e0d6a.firebasestorage.app",
+    messagingSenderId: "804649622117",
+    appId: "1:804649622117:web:5ed418f67bc5826efc448c"
+  };
+
+  addLine('Step 2: 初始化 Firebase App...');
+  firebase.initializeApp(cfg);
+  addLine('✅ Firebase App 初始化成功', 'ok');
+
+  addLine('Step 3: 取得 Firestore 實例...');
+  const db = firebase.firestore();
+  addLine('✅ Firestore 實例建立成功', 'ok');
+
+  addLine('Step 4: 嘗試讀取資料...');
+  db.collection('lmc').doc('test').set({ping: new Date().toISOString()})
+    .then(() => {
+      addLine('✅ 寫入成功！Firebase 連線正常', 'ok');
+      return db.collection('lmc').doc('test').get();
+    })
+    .then(snap => {
+      addLine('✅ 讀取成功：' + JSON.stringify(snap.data()), 'ok');
+      addLine('🎉 Firebase 完全正常！可以回報給 Claude', 'ok');
+    })
+    .catch(e => {
+      addLine('❌ 操作失敗：' + e.code, 'er');
+      addLine('錯誤訊息：' + e.message, 'er');
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(e, null, 2);
+      log.appendChild(pre);
+    });
+
+} catch(e) {
+  addLine('❌ 初始化失敗：' + e.message, 'er');
+  const pre = document.createElement('pre');
+  pre.textContent = e.stack || e.toString();
+  log.appendChild(pre);
+}
+</script>
+</body>
+</html>
