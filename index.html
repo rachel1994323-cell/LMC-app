@@ -98,7 +98,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <button class="nb" id="nb-pu" onclick="ST('pu')"><span class="ic">🛒</span><span class="lb">進貨</span></button>
     <button class="nb" id="nb-sf" onclick="ST('sf')"><span class="ic">👥</span><span class="lb">人事</span></button>
     <button class="nb" id="nb-mo" onclick="ST('mo')"><span class="ic">📋</span><span class="lb">月結算</span></button>
-    <button class="nb" id="nb-ac" onclick="ST('ac')"><span class="ic">🏦</span><span class="lb">帳戶</span></button>
+
     <button class="nb" id="nb-bg" onclick="ST('bg')"><span class="ic">💼</span><span class="lb">存錢袋</span></button>
     <button class="nb" id="nb-an" onclick="ST('an')"><span class="ic">📈</span><span class="lb">年報</span></button>
   </nav>
@@ -122,7 +122,7 @@ const REF = rtdb.ref('lmc');
 // ── 常數 ────────────────────────────────────────────────
 const VA=['立成製麵','櫳樺','陳家麻醬','晨新商行','浤浰商行','源臻有限公司','其他'];
 const VB=['好鄰居','浤浰商行','茉莉商行','小北百貨','其他'];
-const EXPOPTS=['店租','貸款','電費','水費','瓦斯','人事薪資','UberEats服務費','熊貓佣金','其他'];
+const EXPOPTS=['店租','貸款','1F電費','2F電費','水費','瓦斯','人事薪資','UberEats服務費','熊貓佣金','其他'];
 const BAGITEMS=['店租','貸款','水費','電費','立成製麵','晨新商行'];
 const BAGTYPES=['存入','提領','預支','挪用'];
 const MOS=[1,2,3,4,5,6,7,8,9,10,11,12];
@@ -192,7 +192,7 @@ const nw=new Date();
 const N=v=>Number(v||0);
 let CY=nw.getFullYear(),CM=nw.getMonth()+1;
 let AY=CY,BY=CY-1,CMO=CM;
-let saY=CY,saM=CM,puY=CY,puM=CM,moY=CY,moM=CM,acY=CY,acM=CM;
+let saY=CY,saM=CM,puY=CY,puM=CM,moY=CY,moM=CM,sfY=CY,sfM=CM;
 
 function toast(msg,type='ok'){const el=document.getElementById('toast');el.textContent=msg;el.style.background=type==='er'?'#C4706A':'#6B9E78';el.style.color='#fff';el.style.display='block';setTimeout(()=>el.style.display='none',2800);}
 const rLv=(r,g,o)=>r<=g?'g':r<=o?'o':'b';
@@ -204,7 +204,7 @@ function getST(y,m){return(D.staff||[]).reduce((s,p)=>{return s+(p.logs||[]).fil
 
 let tab='ov';
 function ST(t){tab=t;document.querySelectorAll('.nb').forEach(b=>b.classList.remove('ac'));document.getElementById('nb-'+t).classList.add('ac');render();}
-function render(){const el=document.getElementById('mn');const fn={ov:rOv,sa:rSa,pu:rPu,sf:rSf,mo:rMo,ac:rAc,bg:rBg,an:rAn};el.innerHTML=(fn[tab]||rOv)();}
+function render(){const el=document.getElementById('mn');const fn={ov:rOv,sa:rSa,pu:rPu,sf:rSf,mo:rMo,bg:rBg,an:rAn};el.innerHTML=(fn[tab]||rOv)();}
 
 function getPurchList(y,m){
   const k=ym(y,m);
@@ -408,6 +408,8 @@ function delPu(date,id){
 /* ── 人事 ── */
 function rSf(){
   const staff=D.staff||[];
+  const k=ym(sfY,sfM);
+  const monthTot=getST(sfY,sfM);
   return`<div class="card"><div class="ct">👥 新增人員</div>
     <div class="g2 mb8">
       <div><label class="lb2">姓名</label><input type="text" id="stN" placeholder="姓名"></div>
@@ -415,17 +417,26 @@ function rSf(){
     </div>
     <button class="btn bp bfull" onclick="addSf()">新增人員</button>
   </div>
+  <div class="card">
+    <div class="ih"><span style="font-weight:700;color:var(--ac)">📅 查看月份</span>
+      <select onchange="sfY=Number(this.value);render()">${YRS().map(y=>`<option ${y===sfY?'selected':''}>${y}</option>`).join('')}</select>
+      <select onchange="sfM=Number(this.value);render()">${MOS.map(m=>`<option value="${m}" ${m===sfM?'selected':''}>${m}月</option>`).join('')}</select>
+    </div>
+    <div class="st mb8"><div class="sv tc">$${fmt(monthTot)}</div><div class="sl">${sfY}年${sfM}月 人事薪資總計</div></div>
+  </div>
   ${staff.length===0?'<div class="card"><div class="tl" style="text-align:center;padding:14px 0;font-size:13px">尚無人員資料</div></div>':
     staff.map(p=>{
+      const monthLogs=(p.logs||[]).filter(l=>l.date&&l.date.startsWith(k));
+      const monthH=monthLogs.reduce((s,l)=>s+N(l.hours),0);
+      const monthS=monthH*N(p.hourly);
       const allH=p.logs||[];
-      const totH=allH.reduce((s,l)=>s+N(l.hours),0);
-      const totS=totH*N(p.hourly);
       return`<div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <div><div style="font-weight:700;font-size:14px;color:var(--ac)">${p.name}</div>
-          <div class="f12 ts">時薪 $${fmt(p.hourly)}／累計 ${totH}h／$${fmt(totS)}</div></div>
+          <div class="f12 ts">時薪 $${fmt(p.hourly)}　本月 ${monthH}h＝$${fmt(monthS)}</div></div>
           <button class="btn bd2" onclick="delSf('${p.id}')">刪除</button>
         </div>
+        <div style="font-weight:600;font-size:12px;color:var(--ac);margin-bottom:7px">新增工時記錄</div>
         <div class="g2 mb8">
           <div><label class="lb2">日期</label><input type="date" id="sh_${p.id}_d" value="${td()}"></div>
           <div><label class="lb2">工時（小時）</label><input type="number" id="sh_${p.id}_h" placeholder="0"></div>
@@ -433,11 +444,13 @@ function rSf(){
         <div class="mb8"><label class="lb2">備註</label><input type="text" id="sh_${p.id}_n" placeholder="選填"></div>
         <button class="btn bs bfull" onclick="addSL('${p.id}')">新增工時</button>
         <div class="dv"></div>
-        ${[...allH].reverse().slice(0,5).map((l,i)=>`
+        <div class="f12 ts mb6">本月工時明細</div>
+        ${monthLogs.length===0?'<div class="tl f12" style="text-align:center;padding:8px 0">本月尚無記錄</div>':
+          [...monthLogs].reverse().map((l,i)=>`
           <div class="ri"><span class="ts" style="font-size:11px">${l.date}</span>
           <span class="f1 f12">${l.note||''}</span>
           <span class="fw tc">${l.hours}h=$${fmt(N(l.hours)*N(p.hourly))}</span>
-          <button class="btn bd2" onclick="delSL('${p.id}',${allH.length-1-i})">刪</button></div>`).join('')}
+          <button class="btn bd2" onclick="delSLbyDate('${p.id}','${l.date}',${i})">刪</button></div>`).join('')}
       </div>`;
     }).join('')}`;
 }
@@ -450,6 +463,16 @@ function addSL(id){
   p.logs.push({date,hours:N(hours),note});save();toast('✅ 已新增');render();
 }
 function delSL(id,idx){const p=D.staff.find(x=>x.id===id);if(p&&p.logs)p.logs.splice(idx,1);save();toast('已刪除');render();}
+function delSLbyDate(id,date,reversedIdx){
+  const p=D.staff.find(x=>x.id===id);if(!p||!p.logs)return;
+  const k=ym(sfY,sfM);
+  const monthLogs=p.logs.filter(l=>l.date&&l.date.startsWith(k));
+  const target=[...monthLogs].reverse()[reversedIdx];
+  if(!target)return;
+  const globalIdx=p.logs.lastIndexOf(target);
+  if(globalIdx>=0)p.logs.splice(globalIdx,1);
+  save();toast('已刪除');render();
+}
 
 /* ── 月結算 ── */
 function rMo(){
@@ -508,55 +531,6 @@ function updEI(i,v){const k=ym(moY,moM);const{items,extraItems}=gEx(k);items[i].
 function updEX(i,f,v){const k=ym(moY,moM);const{items,extraItems}=gEx(k);extraItems[i][f]=v;sEx(k,items,extraItems);}
 function delEX(i){const k=ym(moY,moM);const{items,extraItems}=gEx(k);extraItems.splice(i,1);sEx(k,items,extraItems);render();}
 function addEX(){const l=document.getElementById('nEL').value,a=document.getElementById('nEA').value;if(!l){toast('請填寫項目名稱','er');return;}const k=ym(moY,moM);const{items,extraItems}=gEx(k);extraItems.push({label:l,amount:a||'0'});sEx(k,items,extraItems);render();}
-
-/* ── 公司帳戶 ── */
-function rAc(){
-  const k=ym(acY,acM);
-  const logs=(D.acct?.[k]||[]).slice().reverse();
-  const tIn=logs.filter(l=>l.type==='收入').reduce((s,l)=>s+N(l.amount),0);
-  const tOut=logs.filter(l=>l.type==='支出').reduce((s,l)=>s+N(l.amount),0);
-  const bal=tIn-tOut;
-  return`<div class="card"><div class="ct">🏦 公司帳戶收支</div>
-    <div class="ih">
-      <select onchange="acY=Number(this.value);render()">${YRS().map(y=>`<option ${y===acY?'selected':''}>${y}</option>`).join('')}</select>
-      <select onchange="acM=Number(this.value);render()">${MOS.map(m=>`<option value="${m}" ${m===acM?'selected':''}>${m}月</option>`).join('')}</select>
-    </div>
-    <div class="g3">
-      <div class="st"><div class="sv tgn">$${fmt(tIn)}</div><div class="sl">本月收入</div></div>
-      <div class="st"><div class="sv trd">$${fmt(tOut)}</div><div class="sl">本月支出</div></div>
-      <div class="st"><div class="sv" style="color:${bal>=0?'var(--gn)':'var(--rd)'}">${bal>=0?'+':''}$${fmt(bal)}</div><div class="sl">餘額</div></div>
-    </div>
-  </div>
-  <div class="card"><div class="ct">➕ 新增收支記錄</div>
-    <div class="g2 mb8">
-      <div><label class="lb2">日期</label><input type="date" id="acD" value="${td()}"></div>
-      <div><label class="lb2">類型</label><select id="acT"><option>收入</option><option>支出</option></select></div>
-    </div>
-    <div class="mb8"><label class="lb2">金額（元）</label><input type="number" id="acA" placeholder="請輸入金額"></div>
-    <div class="mb8"><label class="lb2">說明</label><input type="text" id="acN" placeholder="例：UberEats匯款、付立成製麵…"></div>
-    <button class="btn bp bfull" onclick="addAc()">新增記錄</button>
-  </div>
-  <div class="card"><div class="ct">📋 本月明細</div>
-    ${logs.length===0?'<div class="tl" style="text-align:center;padding:12px 0;font-size:13px">本月尚無記錄</div>':
-      logs.map((l,i)=>`<div class="ri">
-        <span class="ts" style="font-size:11px">${l.date}</span>
-        <span class="tg ${l.type==='收入'?'tgin':'tgout'}">${l.type}</span>
-        <span class="f1 f12">${l.note||''}</span>
-        <span class="fw ${l.type==='收入'?'tgn':'trd'}">${l.type==='收入'?'+':'-'}$${fmt(l.amount)}</span>
-        <button class="btn bd2" onclick="delAc('${k}',${logs.length-1-i})">刪</button>
-      </div>`).join('')}
-  </div>`;
-}
-function addAc(){
-  const date=document.getElementById('acD').value,type=document.getElementById('acT').value;
-  const amt=document.getElementById('acA').value,note=document.getElementById('acN').value;
-  if(!date||!amt){toast('請填寫日期與金額','er');return;}
-  const k=ym(acY,acM);
-  if(!D.acct)D.acct={};if(!D.acct[k])D.acct[k]=[];
-  D.acct[k].push({date,type,amount:N(amt),note});
-  save();toast('✅ 已新增');render();
-}
-function delAc(k,i){D.acct[k].splice(i,1);save();toast('已刪除');render();}
 
 /* ── 存錢袋 ── */
 function rBg(){
