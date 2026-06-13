@@ -182,6 +182,7 @@ async function init(){
   document.getElementById('ld').style.display='none';
   document.getElementById('aw').style.display='block';
   render();
+  fetchWeather(); // 載入天氣
 }
 init();
 
@@ -193,6 +194,45 @@ const N=v=>Number(v||0);
 let CY=nw.getFullYear(),CM=nw.getMonth()+1;
 let AY=CY,BY=CY-1,CMO=CM;
 let saY=CY,saM=CM,puY=CY,puM=CM,moY=CY,moM=CM,sfY=CY,sfM=CM;
+
+// ── 天氣 ────────────────────────────────────────────────
+const WEATHER_ICONS={0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌧',61:'🌧',63:'🌧',65:'🌧',71:'🌨',73:'🌨',75:'🌨',80:'🌦',81:'🌧',82:'🌧',95:'⛈',96:'⛈',99:'⛈'};
+const WEATHER_TEXT={0:'晴天',1:'晴時多雲',2:'多雲',3:'陰天',45:'霧',48:'霧',51:'毛毛雨',53:'毛毛雨',55:'毛毛雨',61:'小雨',63:'中雨',65:'大雨',71:'小雪',73:'中雪',75:'大雪',80:'陣雨',81:'陣雨',82:'大陣雨',95:'雷雨',96:'雷雨夾雹',99:'雷雨夾雹'};
+let weatherData=null;
+
+async function fetchWeather(){
+  try{
+    // 台南座標
+    const res=await fetch('https://api.open-meteo.com/v1/forecast?latitude=22.9998&longitude=120.2269&current=weathercode,temperature_2m,precipitation&timezone=Asia/Taipei&forecast_days=1');
+    const d=await res.json();
+    const code=d.current.weathercode;
+    const temp=Math.round(d.current.temperature_2m);
+    const rain=d.current.precipitation;
+    weatherData={code,temp,rain,icon:WEATHER_ICONS[code]||'🌡',text:WEATHER_TEXT[code]||'未知',isRain:rain>0||[51,53,55,61,63,65,71,73,75,80,81,82,95,96,99].includes(code)};
+    // 更新天氣顯示
+    const el=document.getElementById('weather-box');
+    if(el) el.innerHTML=renderWeatherBox();
+    // 更新營業額頁天氣選擇
+    const sw=document.getElementById('sale-weather');
+    if(sw) sw.value=weatherData.icon+' '+weatherData.text;
+  }catch(e){console.log('天氣載入失敗',e);}
+}
+
+function renderWeatherBox(){
+  if(!weatherData) return '<div class="tl f12">天氣載入中…</div>';
+  return`<div style="display:flex;align-items:center;gap:10px">
+    <div style="font-size:28px">${weatherData.icon}</div>
+    <div>
+      <div style="font-weight:700;font-size:14px;color:${weatherData.isRain?'var(--bl)':'var(--ac)'}">${weatherData.text}　${weatherData.temp}°C</div>
+      <div class="f12 ts">台南　${weatherData.isRain?'⚠️ 今日下雨，注意營業影響':'今日天氣良好'}</div>
+    </div>
+  </div>`;
+}
+
+function getWeatherOptions(){
+  const opts=['☀️ 晴天','🌤 晴時多雲','⛅ 多雲','☁️ 陰天','🌦 陣雨','🌧 下雨','⛈ 雷雨','🌨 下雪','🌫 起霧'];
+  return opts.map(o=>`<option>${o}</option>`).join('');
+}
 
 function toast(msg,type='ok'){const el=document.getElementById('toast');el.textContent=msg;el.style.background=type==='er'?'#C4706A':'#6B9E78';el.style.color='#fff';el.style.display='block';setTimeout(()=>el.style.display='none',2800);}
 const rLv=(r,g,o)=>r<=g?'g':r<=o?'o':'b';
@@ -230,6 +270,7 @@ function rOv(){
   return`<div class="card"><div class="ps"><span style="font-weight:700;color:var(--ac)">📅 期間</span>
     <select onchange="CY=Number(this.value);render()">${YRS().map(y=>`<option ${y===CY?'selected':''}>${y}</option>`).join('')}</select>
     <select onchange="CM=Number(this.value);render()">${MOS.map(m=>`<option value="${m}" ${m===CM?'selected':''}>${m}月</option>`).join('')}</select></div></div>
+  <div class="card mb8" id="weather-box">${renderWeatherBox()}</div>
   <div class="g3 mb8">
     <div class="st"><div class="sv tc">$${fmt(tS)}</div><div class="sl">當月總營業額</div></div>
     <div class="st"><div class="sv trd">$${fmt(tE)}</div><div class="sl">當月總支出</div></div>
@@ -257,7 +298,7 @@ function rOv(){
     ${sl.length===0?'<div class="tl" style="text-align:center;padding:12px 0;font-size:13px">本月尚無記錄</div>':
       [...sl].sort((a,b)=>a.date>b.date?-1:1).map(r=>{const t=N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit);return`
       <div class="ri" style="flex-wrap:wrap;gap:3px">
-        <span class="ts" style="width:100%;font-size:11.5px">${r.date}</span>
+        <span class="ts" style="width:100%;font-size:11.5px">${r.date}${r.weather?'　'+r.weather:''}</span>
         ${N(r.cash)>0?`<span class="tg tgca">現金$${fmt(r.cash)}</span>`:''}
         ${N(r.line)>0?`<span class="tg tgli">Line$${fmt(r.line)}</span>`:''}
         ${N(r.uber)>0?`<span class="tg tgub">Uber$${fmt(r.uber)}</span>`:''}
@@ -285,6 +326,12 @@ function rSa(){
       <div><label class="lb2">Foodpanda（未扣佣）</label><input type="number" id="sP" placeholder="0"></div>
       <div><label class="lb2">匯款</label><input type="number" id="sR" placeholder="0"></div>
     </div>
+    <div class="mb8"><label class="lb2">天氣</label>
+      <select id="sale-weather">
+        <option value="">不記錄</option>
+        ${getWeatherOptions()}
+      </select>
+    </div>
     <button class="btn bp bfull" onclick="addSale()">新增記錄</button>
   </div>
   <div class="card">
@@ -295,7 +342,7 @@ function rSa(){
     ${list.length===0?'<div class="tl" style="text-align:center;padding:12px 0;font-size:13px">本月無記錄</div>':
       list.map(r=>{const t=N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit);return`
       <div class="ri" style="flex-wrap:wrap;gap:3px">
-        <span class="ts" style="width:100%;font-size:11.5px">${r.date}</span>
+        <span class="ts" style="width:100%;font-size:11.5px">${r.date}${r.weather?'　'+r.weather:''}</span>
         ${N(r.cash)>0?`<span class="tg tgca">現金$${fmt(r.cash)}</span>`:''}
         ${N(r.line)>0?`<span class="tg tgli">Line$${fmt(r.line)}</span>`:''}
         ${N(r.uber)>0?`<span class="tg tgub">Uber$${fmt(r.uber)}</span>`:''}
@@ -319,8 +366,9 @@ function addSale(){
   const date=document.getElementById('sD').value;
   const cash=N(document.getElementById('sC').value),line=N(document.getElementById('sL').value);
   const uber=N(document.getElementById('sU').value),panda=N(document.getElementById('sP').value),remit=N(document.getElementById('sR').value);
+  const weather=document.getElementById('sale-weather').value||'';
   if(!date||(cash+line+uber+panda+remit===0)){toast('請填寫日期與至少一項金額','er');return;}
-  D.sales[date]={id:`S${Date.now()}`,date,cash,line,uber,panda,remit};
+  D.sales[date]={id:`S${Date.now()}`,date,cash,line,uber,panda,remit,weather};
   save();toast('✅ 已新增');render();
 }
 function delSale(date){if(!confirm('確定刪除？'))return;delete D.sales[date];save();toast('已刪除');render();}
@@ -498,18 +546,18 @@ function rMo(){
     <div style="background:var(--pl);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:var(--pd)">
       🔒 進貨自動帶入：A $${fmt(pA)} + B $${fmt(pB)} = <strong>$${fmt(pT)}</strong>
     </div>
-    ${items.map((it,i)=>`<div class="er"><label>${it.label}</label><input type="number" placeholder="填入金額" value="${it.amount||''}" onchange="updEI(${i},this.value)"></div>`).join('')}
+    ${items.map((it,i)=>`<div class="er"><label>${it.label}</label><input type="number" placeholder="填入金額" value="${it.amount||''}" oninput="updEI(${i},this.value)" onchange="updEI(${i},this.value)"></div>`).join('')}
     <div class="dv"></div>
     <div style="font-weight:600;color:var(--ac);font-size:12.5px;margin-bottom:7px">自訂支出</div>
-    ${ei.map((it,i)=>`<div class="xr"><input type="text" placeholder="項目" value="${it.label}" onchange="updEX(${i},'label',this.value)"><input type="number" placeholder="金額" value="${it.amount||''}" onchange="updEX(${i},'amount',this.value)"><button class="btn bd2" onclick="delEX(${i})">刪</button></div>`).join('')}
+    ${ei.map((it,i)=>`<div class="xr"><input type="text" placeholder="項目" value="${it.label}" onchange="updEX(${i},'label',this.value)"><input type="number" placeholder="金額" value="${it.amount||''}" oninput="updEX(${i},'amount',this.value)" onchange="updEX(${i},'amount',this.value)"><button class="btn bd2" onclick="delEX(${i})">刪</button></div>`).join('')}
     <div class="xr mt8"><input type="text" id="nEL" placeholder="新項目名稱"><input type="number" id="nEA" placeholder="金額"><button class="btn bs" onclick="addEX()">新增</button></div>
   </div>
   <div class="card"><div class="ct">📊 月結損益</div>
     <div class="g2 mb8">
       <div class="st"><div class="sv tc">$${fmt(tS)}</div><div class="sl">當月總營業額</div></div>
-      <div class="st"><div class="sv trd">$${fmt(tE)}</div><div class="sl">當月總支出</div></div>
+      <div class="st"><div class="sv trd" data-mo-summary="exp">$${fmt(tE)}</div><div class="sl">當月總支出</div></div>
     </div>
-    <div class="sbig"><div class="vl" style="color:${net>=0?'var(--gn)':'var(--rd)'}">${net>=0?'+':''}$${fmt(net)}</div><div class="sl">當月實賺（總營業額 − 總支出）</div></div>
+    <div class="sbig"><div class="vl" style="color:${net>=0?'var(--gn)':'var(--rd)'}" data-mo-summary="net">${net>=0?'+':''}$${fmt(net)}</div><div class="sl">當月實賺（總營業額 − 總支出）</div></div>
     <div class="g3 mb8">
       <div class="st"><div class="sv" style="color:var(--ac)">${wd}天</div><div class="sl">工作天數</div></div>
       <div class="st"><div class="sv" style="color:var(--ac)">$${fmt(avg)}</div><div class="sl">平均每日</div></div>
@@ -519,16 +567,46 @@ function rMo(){
     <div class="${aC(rLv(wR,.25,.35))}">${rLb(rLv(wR,.25,.35))}　人事佔比 ${(wR*100).toFixed(1)}%（$${fmt(stT)}）</div>
     <div class="dv"></div>
     <div class="f12 fw ts mb8">支出明細</div>
+    <div id="mo-detail">
     <div class="vr f12"><span style="color:var(--p);font-weight:700">進貨（自動）</span><span class="fw trd">$${fmt(pT)}</span></div>
     ${[...items,...ei].filter(e=>N(e.amount)>0).map(e=>`<div class="vr f12"><span class="ts">${e.label}</span><span class="fw trd">$${fmt(e.amount)}</span></div>`).join('')}
     <div class="dv"></div>
-    <div class="vr fw f12"><span style="color:var(--ac)">總支出合計</span><span class="trd">$${fmt(tE)}</span></div>
+    <div class="vr fw f12"><span style="color:var(--ac)">總支出合計</span><span class="trd" data-mo-summary="total">$${fmt(tE)}</span></div>
+    </div>
   </div>`;
 }
 function gEx(k){const d=D.expenses?.[k]||{};return{items:d.items||EXPOPTS.map(l=>({label:l,amount:''})),extraItems:d.extraItems||[]};}
 function sEx(k,items,ei){if(!D.expenses)D.expenses={};D.expenses[k]={items,extraItems:ei};save();}
-function updEI(i,v){const k=ym(moY,moM);const{items,extraItems}=gEx(k);items[i].amount=v;sEx(k,items,extraItems);}
-function updEX(i,f,v){const k=ym(moY,moM);const{items,extraItems}=gEx(k);extraItems[i][f]=v;sEx(k,items,extraItems);}
+function updEI(i,v){const k=ym(moY,moM);const{items,extraItems}=gEx(k);items[i].amount=v;sEx(k,items,extraItems);updateMoSummary();}
+function updEX(i,f,v){const k=ym(moY,moM);const{items,extraItems}=gEx(k);extraItems[i][f]=v;sEx(k,items,extraItems);updateMoSummary();}
+function updateMoSummary(){
+  const k=ym(moY,moM);
+  const ex=D.expenses?.[k]||{};
+  const items=ex.items||EXPOPTS.map(l=>({label:l,amount:''}));
+  const ei=ex.extraItems||[];
+  const pT=getPT(moY,moM);
+  const sl=Object.values(D.sales||{}).filter(r=>r.date&&r.date.startsWith(k));
+  const tS=sl.reduce((s,r)=>s+(N(r.cash)+N(r.line)+N(r.uber)+N(r.panda)+N(r.remit)),0);
+  const manT=[...items,...ei].reduce((s,e)=>s+N(e.amount),0);
+  const tE=manT+pT;
+  const net=tS-tE;
+  // 更新顯示的數字
+  const els=document.querySelectorAll('[data-mo-summary]');
+  if(els.length===0){render();return;} // 找不到就整頁重繪
+  els.forEach(el=>{
+    const t=el.getAttribute('data-mo-summary');
+    if(t==='exp') el.textContent='$'+fmt(tE);
+    if(t==='net'){el.textContent=(net>=0?'+':'')+'$'+fmt(net);el.style.color=net>=0?'var(--gn)':'var(--rd)';}
+    if(t==='total'){el.textContent='$'+fmt(tE);}
+  });
+  // 重繪支出明細
+  const detailEl=document.getElementById('mo-detail');
+  if(detailEl){
+    detailEl.innerHTML=`<div class="vr f12"><span style="color:var(--p);font-weight:700">進貨（自動）</span><span class="fw trd">$${fmt(pT)}</span></div>`+
+      [...items,...ei].filter(e=>N(e.amount)>0).map(e=>`<div class="vr f12"><span class="ts">${e.label}</span><span class="fw trd">$${fmt(e.amount)}</span></div>`).join('')+
+      `<div class="dv"></div><div class="vr fw f12"><span style="color:var(--ac)">總支出合計</span><span class="trd">$${fmt(tE)}</span></div>`;
+  }
+}
 function delEX(i){const k=ym(moY,moM);const{items,extraItems}=gEx(k);extraItems.splice(i,1);sEx(k,items,extraItems);render();}
 function addEX(){const l=document.getElementById('nEL').value,a=document.getElementById('nEA').value;if(!l){toast('請填寫項目名稱','er');return;}const k=ym(moY,moM);const{items,extraItems}=gEx(k);extraItems.push({label:l,amount:a||'0'});sEx(k,items,extraItems);render();}
 
